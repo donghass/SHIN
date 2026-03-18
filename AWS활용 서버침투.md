@@ -1,7 +1,8 @@
 > ⚠️ 주의
 > 이 문서는 보안 학습 및 승인된 테스트 환경에서의 실습 내용을 정리한 기록이다.
 > 실제 시스템에 대한 무단 접근이나 권한 남용을 목적으로 작성된 것이 아니다.
-
+> 
+> 캐피탈 원(Capital One) AWS 개인정보 유출 사고 (2019) 사례를 바탕으로 실습하였다.
 # 🛡️ AWS Cloud Lateral Movement 과정 정리
 
 이미 장악한 WAS 서버의 자격 증명을 활용하여
@@ -42,7 +43,7 @@ proxychains4 aws ec2 describe-instances --region ap-northeast-2 \
 Role 기반 임시 키가 아닌 **IAM User 영구 자격 증명(Long-term Key)**을 확보한다.
 
 ```bash
-env | grep -iE "AWS_ACCESS_KEY|AWS_SECRET_KEY"
+env
 ```
 
 ### 확인된 정보 예시
