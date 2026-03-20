@@ -43,7 +43,7 @@ IAM Role 및 AWS 자격 증명을 활용하여
     unset AWS_ACCESS_KEY_ID
     unset AWS_SECRET_ACCESS_KEY
 
-    export AWS_ACCESS_KEY_ID="ASIA***************"
+    export AWS_ACCESS_KEY_ID="ASI***************"
     export AWS_SECRET_ACCESS_KEY="************************"
     export AWS_SESSION_TOKEN="************************"
     export AWS_DEFAULT_REGION="ap-northeast-2"
