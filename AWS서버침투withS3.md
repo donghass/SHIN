@@ -54,7 +54,7 @@ IAM Role 및 AWS 자격 증명을 활용하여
     aws s3 ls
     aws s3 ls s3://book-village/backup/ --recursive
 ![img_8.png](img/AWS서버침투withS3/img_8.png)
-```
+```bash
 aws s3 cp s3://book-village-s3/backup/Book-Village.pem ./Book-Village.pem
 ```
 ![img_9.png](img/AWS서버침투withS3/img_9.png)
