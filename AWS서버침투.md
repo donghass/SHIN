@@ -72,9 +72,9 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 
 # 2. 새로 얻은 '영구 키'를 서버 환경 변수에 주입.
-export AWS_ACCESS_KEY_ID="ACCESS***************"
-export AWS_SECRET_ACCESS_KEY="ECRET**************************"
-export AWS_SESSION_TOKEN="IQoJb3Jp*************************************************"
+export AWS_ACCESS_KEY_ID="ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="SECRET_KEY"
+export AWS_SESSION_TOKEN="YOUR_TOKEN"
 export AWS_DEFAULT_REGION="ap-northeast-2"
 ```
 
